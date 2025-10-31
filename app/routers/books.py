@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.models.Book import Book
 from app.schemas.book import BookCreate, BookUpdate, BookResponse
 from typing import List
+import datetime
 
 router = APIRouter(
     prefix="/books",
@@ -42,6 +43,17 @@ def get_book(book_id: int, db: Session = Depends(get_db)):
 
 @router.post("/", response_model=BookResponse)
 def create_book(book: BookCreate, db: Session = Depends(get_db)):
+    
+    if book.year < 0 or book.year > datetime.datetime.now().year:
+        raise HTTPException(status_code=400, detail="Yil 0 dan katta va joriy yildan oshmasligi kerak")
+    
+    if book.rating < 0 or book.rating > 5:
+        raise HTTPException(status_code=400, detail="Rayting 0.0 dan 5.0 gacha bolishi kerak")
+    
+    book = db.query(Book).filter(Book.title == book.title, Book.author == book.author).first()
+    if book:
+        raise HTTPException(status_code=400, detail="Bu kitob mavjud")
+    
     db_book = Book(
         title=book.title,
         author=book.author,
@@ -57,12 +69,26 @@ def create_book(book: BookCreate, db: Session = Depends(get_db)):
 @router.put("/{book_id}", response_model=BookResponse)
 def update_book(book_id: int, updated_book: BookUpdate, db: Session = Depends(get_db)):
     book = db.query(Book).filter(Book.id == book_id).first()
+    
     if not book:
         raise HTTPException(status_code=404, detail="Book not found")
     
     update_data = updated_book.dict(exclude_unset=True)
     for key, value in update_data.items():
-        setattr(book, key, value)
+        if key == "title":
+            book.title = value
+        elif key == "author":
+            book.author = value
+        elif key == "genre":
+            book.genre = value
+        elif key == "year":
+            if value < 0 or value > datetime.datetime.now().year:
+                raise HTTPException(status_code=400, detail="Yil 0 dan katta va joriy yildan oshmasligi kerak")
+            book.year = value
+        elif key == "rating":
+            if value < 0 or value > 5:
+                raise HTTPException(status_code=400, detail="Rayting 0.0 dan 5.0 gacha bolishi kerak")
+            book.rating = value
     
     db.commit()
     db.refresh(book)
